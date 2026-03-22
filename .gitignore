@@ -20,6 +20,7 @@ __pycache__/
 # IDE
 .idea/
 .vscode/
+.claude/
 
 # OS
 .DS_Store
