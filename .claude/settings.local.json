@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(du -sh ./data/*)",
-      "Bash(python -X utf8 -c \":*)"
-    ]
-  }
-}
