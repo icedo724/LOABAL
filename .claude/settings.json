@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \":*)",
+      "Bash(rm tmp_dates.txt)",
+      "Bash(python crawling/crawler.py --since 2026-03-21)",
+      "Bash(python -X utf8 crawling/crawler.py --since 2026-03-21)",
+      "Bash(tee tmp_crawl_log.txt)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(python -X utf8 labeling/auto_labeler.py)",
+      "Bash(.venv/Scripts/pip install:*)",
+      "Bash(python -X utf8 -c \":*)",
+      "Bash(python -X utf8 -u -c \":*)",
+      "Bash(rm -f \"c:/Users/icedo/Desktop/1/포폴용/loabal/data/labeled/expressions_auto.csv\")",
+      "Bash(python -X utf8 -u labeling/auto_labeler.py)",
+      "Bash(wc -l ./crawling/crawler.py ./labeling/*.py ./model/*.py)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\icedo\\Desktop\\1\\포폴용\\loabal\\data\\backup"
+    ]
+  }
+}

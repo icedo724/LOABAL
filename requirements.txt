@@ -1,0 +1,21 @@
+# 크롤링
+selenium==4.40.0
+webdriver-manager==4.0.2
+beautifulsoup4==4.14.3
+lxml==6.0.2
+
+# 라벨링
+google-generativeai==0.8.6
+python-dotenv==1.2.1
+
+# 공통
+pandas==3.0.0
+numpy==2.4.2
+
+# 모델 학습
+# torch는 CUDA 버전에 따라 별도 설치 필요:
+#   CPU    : pip install torch==2.7.1
+#   CUDA 11.8: pip install torch==2.7.1+cu118 --index-url https://download.pytorch.org/whl/cu118
+#   CUDA 12.1: pip install torch==2.7.1+cu121 --index-url https://download.pytorch.org/whl/cu121
+transformers==5.1.0
+scikit-learn==1.8.0
