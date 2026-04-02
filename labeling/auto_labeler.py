@@ -208,7 +208,7 @@ def label_csv(input_path: str, output_path: str, resume: bool = True):
     else:
         results = []
 
-    df_todo   = df_input[~df_input["post_id"].isin(processed_ids)]
+    df_todo   = df_input[~df_input["post_id"].isin(processed_ids)].drop_duplicates(subset="post_id")
     total     = len(df_todo)
     if total == 0:
         print("모든 항목 처리 완료.")
@@ -261,29 +261,48 @@ def label_csv(input_path: str, output_path: str, resume: bool = True):
             _append(expressions)
         except RuntimeError as e:
             if "TPD_EXHAUSTED" in str(e):
-                print(f"  [키{key_idx+1} TPD 소진] 다음 키로 전환...")
-                trackers[key_idx].daily_count = RPD_PER_KEY
-                key_idx += 1
-                if key_idx >= len(keys):
-                    print(f"\n[!] 모든 키 일일 토큰 소진. 저장 후 종료.")
+                flag          = "[ERR]    "
+                expressions   = []
+                all_exhausted = False
+                err           = str(e)
+                while "TPD_EXHAUSTED" in err:
+                    print(f"  [키{key_idx+1} TPD 소진] 다음 키로 전환...")
+                    trackers[key_idx].daily_count = RPD_PER_KEY
+                    key_idx += 1
+                    if key_idx >= len(keys):
+                        print(f"\n[!] 모든 키 일일 토큰 소진. 저장 후 종료.")
+                        all_exhausted = True
+                        break
+                    try:
+                        expressions = call_groq(clients[key_idx], trackers[key_idx], job_class, title, content, comments)
+                        flag = "[OK]     "
+                        _append(expressions)
+                        err  = ""
+                    except RuntimeError as re2:
+                        err = str(re2)
+                        if "TPD_EXHAUSTED" not in err:
+                            error_count += 1
+                            results.append({"post_id": post_id, "job_class": job_class,
+                                            "expression_text": "", "sentiment": "ERROR",
+                                            "confidence": 0.0, "reason": err[:200], "is_reviewed": "NEEDS_REVIEW"})
+                            err = ""
+                    except Exception as ge:
+                        err = ""
+                        error_count += 1
+                        results.append({"post_id": post_id, "job_class": job_class,
+                                        "expression_text": "", "sentiment": "ERROR",
+                                        "confidence": 0.0, "reason": str(ge)[:200], "is_reviewed": "NEEDS_REVIEW"})
+                if all_exhausted:
                     break
-                try:
-                    expressions = call_groq(clients[key_idx], trackers[key_idx], job_class, title, content, comments)
-                    flag        = "[OK]     "
-                    _append(expressions)
-                except Exception as e2:
-                    error_count += 1
-                    results.append({"post_id": post_id, "job_class": job_class,
-                                    "expression_text": "", "sentiment": "ERROR",
-                                    "confidence": 0.0, "reason": str(e2)[:200], "is_reviewed": "NEEDS_REVIEW"})
             else:
                 print(f"\n[중단] {e}")
                 break
-            used = sum(t.daily_count for t in trackers)
+            used    = sum(t.daily_count for t in trackers)
+            cur_key = min(key_idx, len(keys) - 1)
             print(
                 f"[{i:>5}/{total}] {flag} "
                 f"{job_class:<12} | {title[:22]:<22} → "
-                f"{len(expressions)}개 표현  (키{key_idx+1}: {trackers[key_idx].status_line()} | 합계 {used}/{total_rpd})"
+                f"{len(expressions)}개 표현  (키{cur_key+1}: {trackers[cur_key].status_line()} | 합계 {used}/{total_rpd})"
             )
 
         except Exception as e:

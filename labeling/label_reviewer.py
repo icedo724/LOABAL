@@ -50,8 +50,8 @@ def colorize(label: str) -> str:
 
 
 def review_csv(input_path: str):
-    df      = pd.read_csv(input_path, dtype={"post_id": str})
-    mask    = df["is_reviewed"].isin(["NEEDS_REVIEW", "ERROR"])
+    df      = pd.read_csv(input_path, dtype={"post_id": str, "is_reviewed": str})
+    mask    = df["is_reviewed"].isin(["NEEDS_REVIEW", "ERROR", "MANUAL"])
     targets = df[mask]
     total   = len(targets)
 
@@ -104,13 +104,12 @@ def review_csv(input_path: str):
             continue
         else:
             df.at[df_idx, "sentiment"]   = action
-            df.at[df_idx, "is_reviewed"] = True
+            df.at[df_idx, "is_reviewed"] = "True"
             reviewed_count += 1
+            df.to_csv(input_path, index=False, encoding="utf-8-sig")
             print(f"  → {colorize(action)} 저장됨")
 
-    df.to_csv(input_path, index=False, encoding="utf-8-sig")
-
-    remaining  = (df["is_reviewed"].isin(["NEEDS_REVIEW", "ERROR"])).sum()
+    remaining  = (df["is_reviewed"].isin(["NEEDS_REVIEW", "ERROR", "MANUAL"])).sum()
     total_done = (df["is_reviewed"] == True).sum()   # noqa: E712
 
     print(f"\n{'='*60}")
