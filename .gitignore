@@ -25,7 +25,3 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
-
-# 미완성 문서 (완성 후 업로드)
-docs/report.md
-docs/training_log.md
