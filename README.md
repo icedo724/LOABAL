@@ -110,6 +110,12 @@ python demo.py
 
 ---
 
+## 리포트
+
+[LOABAL 리포트 (Notion)](https://www.notion.so/miniminimin/LOABAL-327fbcdaed28802fa544c1a4d081d356)
+
+---
+
 ## 참여자
 
 조민서 · icedo724@gmail.com
