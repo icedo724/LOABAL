@@ -16,7 +16,7 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from label_schema import BalanceLabel, get_project_paths
 
-C = {
+ANSI = {
     "positive" : "\033[92m",
     "negative" : "\033[91m",
     "neutral"  : "\033[93m",
@@ -37,16 +37,16 @@ KEY_MAP = {
 }
 
 LABEL_MENU = (
-    f"  {C['bold']}[1]{C['reset']} {C['positive']}positive{C['reset']}   "
-    f"{C['bold']}[2]{C['reset']} {C['negative']}negative{C['reset']}   "
-    f"{C['bold']}[3]{C['reset']} {C['neutral']}neutral{C['reset']}   "
-    f"{C['bold']}[4]{C['reset']} {C['unrelated']}unrelated{C['reset']}   "
-    f"{C['dim']}[s] 건너뜀   [q] 저장 후 종료{C['reset']}"
+    f"  {ANSI['bold']}[1]{ANSI['reset']} {ANSI['positive']}positive{ANSI['reset']}   "
+    f"{ANSI['bold']}[2]{ANSI['reset']} {ANSI['negative']}negative{ANSI['reset']}   "
+    f"{ANSI['bold']}[3]{ANSI['reset']} {ANSI['neutral']}neutral{ANSI['reset']}   "
+    f"{ANSI['bold']}[4]{ANSI['reset']} {ANSI['unrelated']}unrelated{ANSI['reset']}   "
+    f"{ANSI['dim']}[s] 건너뜀   [q] 저장 후 종료{ANSI['reset']}"
 )
 
 
 def colorize(label: str) -> str:
-    return f"{C.get(label, '')}{label}{C['reset']}"
+    return f"{C.get(label, '')}{label}{ANSI['reset']}"
 
 
 def review_csv(input_path: str):
@@ -60,7 +60,7 @@ def review_csv(input_path: str):
         return
 
     print(f"\n{'='*60}")
-    print(f"  {C['bold']}수동 검수 시작{C['reset']} — 총 {total}건")
+    print(f"  {ANSI['bold']}수동 검수 시작{ANSI['reset']} — 총 {total}건")
     print(f"  파일: {input_path}")
     print(f"{'='*60}")
     print(LABEL_MENU)
@@ -77,8 +77,8 @@ def review_csv(input_path: str):
 
         expr_preview = expr_text[:200] + ("..." if len(expr_text) > 200 else "")
 
-        print(f"\n{C['bold']}[{idx}/{total}]{C['reset']}  "
-              f"직업: {C['bold']}{job_class}{C['reset']}  |  "
+        print(f"\n{ANSI['bold']}[{idx}/{total}]{ANSI['reset']}  "
+              f"직업: {ANSI['bold']}{job_class}{ANSI['reset']}  |  "
               f"신뢰도: {confidence}  |  post_id: {row.get('post_id','')}")
         print(f"  표현   : {expr_preview}")
         print(f"  AI판정 : {colorize(cur_label)}  |  근거: {reason}")
@@ -110,7 +110,7 @@ def review_csv(input_path: str):
             print(f"  → {colorize(action)} 저장됨")
 
     remaining  = (df["is_reviewed"].isin(["NEEDS_REVIEW", "ERROR", "MANUAL"])).sum()
-    total_done = (df["is_reviewed"] == True).sum()   # noqa: E712
+    total_done = (df["is_reviewed"] == "True").sum()
 
     print(f"\n{'='*60}")
     print(f"  검수 완료: {reviewed_count}건  |  전체 완료: {total_done}건")

@@ -5,7 +5,9 @@ demo.py — 학습된 모델로 문장 감성 분류 대화형 데모
         python demo.py --mode job --job 디스트로이어
 """
 
-import os, sys, argparse
+import os
+import sys
+import argparse
 import torch
 from transformers import ElectraTokenizerFast, ElectraForSequenceClassification
 

@@ -156,8 +156,7 @@ def train(input_path: str, epochs: int, batch_size: int,
 
     texts, labels, df = load_dataset(input_path, job_filter=job_filter)
     if len(texts) < 100:
-        print(f"\n[경고] 학습 데이터가 {len(texts)}건으로 너무 적습니다.")
-        print("       최소 200건 이상 권장, 500건 이상이면 포트폴리오 수치가 안정적으로 나옵니다.")
+        print(f"\n[경고] 학습 데이터가 {len(texts)}건으로 너무 적습니다. 최소 200건 이상 권장.")
         if len(texts) < 50:
             print("[중단] 50건 미만 — 라벨링을 더 진행 후 재시도하세요.")
             sys.exit(1)

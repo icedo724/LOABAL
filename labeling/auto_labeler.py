@@ -68,6 +68,7 @@ class RateTracker:
         self._rpm_window = []
 
     def wait_rpm(self):
+        """RPM 한도 초과 시 윈도우 갱신 후 대기."""
         now = time.time()
         self._rpm_window = [t for t in self._rpm_window if now - t < 60]
         if len(self._rpm_window) >= RPM_PER_KEY:
@@ -136,7 +137,7 @@ def parse_response(raw: str) -> list[dict]:
 
 def call_groq(client: Groq, tracker: RateTracker,
               job_class: str, title: str, content: str, comments: str) -> list[dict]:
-    """Groq API 호출. RPM 초과 시 대기 후 재시도, TPD 소진 시 RuntimeError('TPD_EXHAUSTED')."""
+    """Groq API 호출. RPM 초과 시 대기 후 재시도. TPD 소진 시 RuntimeError('TPD_EXHAUSTED')."""
     prompt = build_prompt(job_class, title, content, comments)
 
     while True:
@@ -158,7 +159,7 @@ def call_groq(client: Groq, tracker: RateTracker,
             return parse_response(response.choices[0].message.content.strip())
 
         except Exception as e:
-            err   = str(e)
+            err    = str(e)
             is_429 = "429" in err or "rate_limit" in err.lower()
             if not is_429:
                 raise
@@ -168,12 +169,26 @@ def call_groq(client: Groq, tracker: RateTracker,
 
             # retry-after 파싱: "try again in 1m3.936s" 또는 "try again in 31.2s"
             m = re.search(r"try again in (?:(\d+)m)?([\d.]+)s", err)
-            if m:
-                wait = int(m.group(1) or 0) * 60 + float(m.group(2)) + 1
-            else:
-                wait = 62
+            wait = (int(m.group(1) or 0) * 60 + float(m.group(2)) + 1) if m else 62
             print(f"  [TPM/RPM] 한도 → {wait:.0f}초 대기 후 재시도...")
             time.sleep(wait)
+
+
+def _make_rows(post_id: str, job_class: str, expressions: list[dict]) -> list[dict]:
+    """expression 목록을 CSV 행 형식으로 변환."""
+    rows = []
+    for expr in expressions:
+        is_reviewed = "NEEDS_REVIEW" if expr["confidence"] < CONFIDENCE_THRESH else "False"
+        rows.append({
+            "post_id"        : post_id,
+            "job_class"      : job_class,
+            "expression_text": expr["expression_text"],
+            "sentiment"      : expr["sentiment"],
+            "confidence"     : round(expr["confidence"], 3),
+            "reason"         : expr["reason"],
+            "is_reviewed"    : is_reviewed,
+        })
+    return rows
 
 
 def label_csv(input_path: str, output_path: str, resume: bool = True):
@@ -208,8 +223,8 @@ def label_csv(input_path: str, output_path: str, resume: bool = True):
     else:
         results = []
 
-    df_todo   = df_input[~df_input["post_id"].isin(processed_ids)].drop_duplicates(subset="post_id")
-    total     = len(df_todo)
+    df_todo = df_input[~df_input["post_id"].isin(processed_ids)].drop_duplicates(subset="post_id")
+    total   = len(df_todo)
     if total == 0:
         print("모든 항목 처리 완료.")
         return
@@ -226,9 +241,11 @@ def label_csv(input_path: str, output_path: str, resume: bool = True):
         print(f" [!] 일일 한도 초과 → {days}일 분할 처리 (자동 이어하기)")
     print(f"{'='*56}\n")
 
-    error_count = 0
+    error_count   = 0
+    processed_cnt = 0  # 실제 처리된 포스트 수 (API 호출 수와 무관)
 
     for i, (_, row) in enumerate(df_todo.iterrows(), 1):
+        # 소진된 키 건너뜀
         while key_idx < len(keys) and trackers[key_idx].exhausted():
             print(f"  [키{key_idx+1} 소진] 다음 키로 전환...")
             key_idx += 1
@@ -242,73 +259,58 @@ def label_csv(input_path: str, output_path: str, resume: bool = True):
         content   = str(row.get("content",   ""))
         comments  = str(row.get("comments",  ""))
 
-        def _append(expressions: list[dict]):
-            for expr in expressions:
-                results.append({
-                    "post_id"        : post_id,
-                    "job_class"      : job_class,
-                    "expression_text": expr["expression_text"],
-                    "sentiment"      : expr["sentiment"],
-                    "confidence"     : round(expr["confidence"], 3),
-                    "reason"         : expr["reason"],
-                    "is_reviewed"    : "NEEDS_REVIEW" if expr["confidence"] < CONFIDENCE_THRESH else False,
-                })
+        expressions = []
+        flag        = "[ERR]    "
 
         try:
             expressions  = call_groq(clients[key_idx], trackers[key_idx], job_class, title, content, comments)
             needs_review = sum(1 for e in expressions if e["confidence"] < CONFIDENCE_THRESH)
             flag         = "[검수필요]" if needs_review else "[OK]     "
-            _append(expressions)
+            results.extend(_make_rows(post_id, job_class, expressions))
+            processed_cnt += 1
+
         except RuntimeError as e:
-            if "TPD_EXHAUSTED" in str(e):
-                flag          = "[ERR]    "
-                expressions   = []
-                all_exhausted = False
-                err           = str(e)
-                while "TPD_EXHAUSTED" in err:
-                    print(f"  [키{key_idx+1} TPD 소진] 다음 키로 전환...")
-                    trackers[key_idx].daily_count = RPD_PER_KEY
-                    key_idx += 1
-                    if key_idx >= len(keys):
-                        print(f"\n[!] 모든 키 일일 토큰 소진. 저장 후 종료.")
-                        all_exhausted = True
-                        break
-                    try:
-                        expressions = call_groq(clients[key_idx], trackers[key_idx], job_class, title, content, comments)
-                        flag = "[OK]     "
-                        _append(expressions)
-                        err  = ""
-                    except RuntimeError as re2:
-                        err = str(re2)
-                        if "TPD_EXHAUSTED" not in err:
-                            error_count += 1
-                            results.append({"post_id": post_id, "job_class": job_class,
-                                            "expression_text": "", "sentiment": "ERROR",
-                                            "confidence": 0.0, "reason": err[:200], "is_reviewed": "NEEDS_REVIEW"})
-                            err = ""
-                    except Exception as ge:
-                        err = ""
+            if "TPD_EXHAUSTED" not in str(e):
+                print(f"\n[중단] {e}")
+                break
+
+            # TPD 소진 → 다음 키로 순차 전환
+            all_exhausted = False
+            err = str(e)
+            while "TPD_EXHAUSTED" in err:
+                print(f"  [키{key_idx+1} TPD 소진] 다음 키로 전환...")
+                trackers[key_idx].daily_count = RPD_PER_KEY
+                key_idx += 1
+                if key_idx >= len(keys):
+                    print(f"\n[!] 모든 키 일일 토큰 소진. 저장 후 종료.")
+                    all_exhausted = True
+                    break
+                try:
+                    expressions = call_groq(clients[key_idx], trackers[key_idx], job_class, title, content, comments)
+                    flag = "[OK]     "
+                    results.extend(_make_rows(post_id, job_class, expressions))
+                    processed_cnt += 1
+                    err = ""
+                except RuntimeError as e2:
+                    err = str(e2)
+                    if "TPD_EXHAUSTED" not in err:
                         error_count += 1
                         results.append({"post_id": post_id, "job_class": job_class,
                                         "expression_text": "", "sentiment": "ERROR",
-                                        "confidence": 0.0, "reason": str(ge)[:200], "is_reviewed": "NEEDS_REVIEW"})
-                if all_exhausted:
-                    break
-            else:
-                print(f"\n[중단] {e}")
+                                        "confidence": 0.0, "reason": err[:200], "is_reviewed": "ERROR"})
+                        err = ""
+                except Exception as e2:
+                    error_count += 1
+                    results.append({"post_id": post_id, "job_class": job_class,
+                                    "expression_text": "", "sentiment": "ERROR",
+                                    "confidence": 0.0, "reason": str(e2)[:200], "is_reviewed": "ERROR"})
+                    err = ""
+            if all_exhausted:
                 break
-            used    = sum(t.daily_count for t in trackers)
-            cur_key = min(key_idx, len(keys) - 1)
-            print(
-                f"[{i:>5}/{total}] {flag} "
-                f"{job_class:<12} | {title[:22]:<22} → "
-                f"{len(expressions)}개 표현  (키{cur_key+1}: {trackers[cur_key].status_line()} | 합계 {used}/{total_rpd})"
-            )
 
         except Exception as e:
             error_count += 1
             err_msg = str(e)
-            print(f"[{i:>5}/{total}] [ERR] post_id={post_id}: {err_msg[:80]}")
             results.append({
                 "post_id"        : post_id,
                 "job_class"      : job_class,
@@ -316,11 +318,19 @@ def label_csv(input_path: str, output_path: str, resume: bool = True):
                 "sentiment"      : "ERROR",
                 "confidence"     : 0.0,
                 "reason"         : err_msg[:200],
-                "is_reviewed"    : "NEEDS_REVIEW",
+                "is_reviewed"    : "ERROR",
             })
 
+        # 진행 출력 (성공/실패 공통)
+        used    = sum(t.daily_count for t in trackers)
+        cur_key = min(key_idx, len(keys) - 1)
+        print(
+            f"[{i:>5}/{total}] {flag} "
+            f"{job_class:<12} | {title[:22]:<22} → "
+            f"{len(expressions)}개 표현  (키{cur_key+1}: {trackers[cur_key].status_line()} | 합계 {used}/{total_rpd})"
+        )
+
         if i % BATCH_SAVE_EVERY == 0:
-            used = sum(t.daily_count for t in trackers)
             pd.DataFrame(results).to_csv(output_path, index=False, encoding="utf-8-sig")
             print(f"  [중간 저장] {i}건 처리 완료 | 합계 {used}/{total_rpd}")
 
@@ -328,11 +338,10 @@ def label_csv(input_path: str, output_path: str, resume: bool = True):
     df_out.to_csv(output_path, index=False, encoding="utf-8-sig")
     needs_review = (df_out["is_reviewed"] == "NEEDS_REVIEW").sum()
     total_expr   = len(df_out)
-    total_used   = sum(t.daily_count for t in trackers)
-    remaining    = total - total_used
+    remaining    = total - processed_cnt
 
     print(f"\n{'='*56}")
-    print(f" 완료! 포스트 {total_used}건 처리 → expression {total_expr}건")
+    print(f" 완료! 포스트 {processed_cnt}건 처리 → expression {total_expr}건")
     for j, t in enumerate(trackers):
         print(f"  키{j+1}: {t.daily_count}건 사용")
     print(f"  오류         : {error_count}건")

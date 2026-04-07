@@ -108,7 +108,7 @@ NEG_RE     = [re.compile(p) for p in NEG_PATTERNS]
 POS_RE     = [re.compile(p) for p in POS_PATTERNS]
 UNREL_RE   = [re.compile(p) for p in UNRELATED_PATTERNS]
 
-# neutral로 유지할 밸런스 관련 키워드 (이게 있어야 진짜 neutral)
+# neutral 판정 유지 조건: 밸런스 관련 키워드가 존재해야 neutral로 인정
 NEUTRAL_BALANCE_RE = re.compile(
     r"(패치|밸런스|버프|너프|상향|하향|개편|체급|밸패|강화\s*해|약화|조정|조율|균형"
     r"|언제\s*(해줄|올려줄|패치|버프|올까|해줘)"
